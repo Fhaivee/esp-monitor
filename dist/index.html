@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP Realtime Monitor — Firebase Public Dashboard</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    code, pre {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .pulse-dot {
+      animation: pulse-ring 1.8s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 1; }
+      70% { transform: scale(1.6); opacity: 0; }
+      100% { transform: scale(1.6); opacity: 0; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen antialiased">
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-lg transition-all">
+    <span id="toastText">Disalin ke clipboard</span>
+  </div>
+
+  <!-- Header -->
+  <header class="bg-slate-900 text-white border-b border-slate-800">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 font-bold text-lg">
+          IoT
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold tracking-tight">ESP Realtime Monitor</h1>
+          <p class="text-xs text-slate-400">Dashboard Publik &amp; Akses Data JSON Firebase</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <div id="statusBadge" class="inline-flex items-center gap-2 rounded-full bg-amber-500/15 border border-amber-400/30 px-3 py-1.5 text-xs font-medium text-amber-300">
+          <span class="relative flex h-2 w-2">
+            <span id="statusPing" class="pulse-dot absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+            <span id="statusDot" class="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+          </span>
+          <span id="statusText">Mode Simulasi</span>
+        </div>
+
+        <button id="togglePollBtn" type="button" class="rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition">
+          Jeda
+        </button>
+        <button id="toggleConfigBtn" type="button" class="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-xs font-medium text-white transition">
+          Atur Firebase
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+    <!-- Config Panel -->
+    <section id="configPanel" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <div class="flex flex-wrap items-start justify-between gap-2 mb-4">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-900">Konfigurasi Sumber Firebase Realtime Database</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Masukkan URL Realtime Database public milikmu untuk mulai menarik data live dari ESP, atau pakai Mode Simulasi untuk demo.</p>
+        </div>
+        <button id="useDemoBtn" type="button" class="text-xs font-medium text-indigo-600 hover:text-indigo-700 underline">
+          Gunakan Mode Simulasi
+        </button>
+      </div>
+
+      <form id="configForm" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+        <div class="md:col-span-6">
+          <label for="firebaseUrlInput" class="block text-xs font-medium text-slate-700 mb-1">Firebase Database URL</label>
+          <input id="firebaseUrlInput" type="url" placeholder="https://nama-project-default-rtdb.asia-southeast1.firebasedatabase.app" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+        </div>
+        <div class="md:col-span-2">
+          <label for="nodePathInput" class="block text-xs font-medium text-slate-700 mb-1">Node Path</label>
+          <input id="nodePathInput" type="text" value="data_loop" placeholder="data_loop" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+        </div>
+        <div class="md:col-span-2">
+          <label for="intervalSelect" class="block text-xs font-medium text-slate-700 mb-1">Interval</label>
+          <select id="intervalSelect" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm bg-white focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+            <option value="1000">1 detik</option>
+            <option value="2000">2 detik</option>
+            <option value="3000" selected>3 detik</option>
+            <option value="5000">5 detik</option>
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <button type="submit" class="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-4 transition shadow-sm">
+            Hubungkan
+          </button>
+        </div>
+      </form>
+      <p id="errorBanner" class="hidden mt-3 rounded-xl bg-rose-50 border border-rose-200 px-3.5 py-2 text-xs text-rose-700"></p>
+    </section>
+
+    <!-- KPI Cards -->
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium uppercase tracking-wider text-slate-500">Nilai Terbaru</span>
+          <span id="deltaBadge" class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">—</span>
+        </div>
+        <div class="mt-3 flex items-baseline gap-2">
+          <span id="latestValue" class="text-4xl font-bold tracking-tight text-slate-900">--</span>
+          <span id="valueKeyLabel" class="text-xs font-medium text-slate-400">nilai</span>
+        </div>
+        <p class="mt-2 text-xs text-slate-500">Min: <strong id="minValue" class="text-slate-700">--</strong> · Maks: <strong id="maxValue" class="text-slate-700">--</strong></p>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium uppercase tracking-wider text-slate-500">Counter Loop ESP</span>
+          <span class="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">Live</span>
+        </div>
+        <div class="mt-3 flex items-baseline gap-2">
+          <span id="latestCounter" class="text-4xl font-bold tracking-tight text-slate-900">--</span>
+          <span class="text-xs font-medium text-slate-400">iterasi</span>
+        </div>
+        <p class="mt-2 text-xs text-slate-500">Total sampel di grafik: <strong id="sampleCount" class="text-slate-700">0</strong></p>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium uppercase tracking-wider text-slate-500">Sinkronisasi Terakhir</span>
+          <span id="modeTag" class="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">Simulasi</span>
+        </div>
+        <div class="mt-3">
+          <span id="lastUpdated" class="text-2xl font-bold tracking-tight text-slate-900">--:--:--</span>
+        </div>
+        <p class="mt-2 text-xs text-slate-500">Interval polling: <strong id="intervalDisplay" class="text-slate-700">3 detik</strong></p>
+      </div>
+    </section>
+
+    <!-- Chart & Raw JSON -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- Live Chart -->
+      <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-base font-semibold text-slate-900">Grafik Data Looping</h2>
+            <p class="text-xs text-slate-500">Menampilkan maksimal 20 pembacaan terakhir secara realtime</p>
+          </div>
+          <button id="clearChartBtn" type="button" class="rounded-lg border border-slate-200 hover:bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition">
+            Reset Grafik
+          </button>
+        </div>
+        <div class="relative h-72 w-full">
+          <canvas id="liveChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Public API / Share for Friends -->
+      <div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between gap-4">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-base font-semibold text-slate-900">Ambil Data (API Publik)</h2>
+            <span class="rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">GET JSON</span>
+          </div>
+          <p class="text-xs text-slate-500 mb-3">Bagikan endpoint ini ke teman supaya mereka bisa langsung mengambil nilai ESP dari kode mereka sendiri.</p>
+
+          <!-- Endpoint Box -->
+          <div class="flex items-center gap-2 rounded-xl bg-slate-100 border border-slate-200 p-2 mb-4">
+            <code id="endpointUrlText" class="text-xs text-slate-700 truncate flex-1 px-1">https://nama-project-default-rtdb.asia-southeast1.firebasedatabase.app/data_loop.json</code>
+            <button id="copyUrlBtn" type="button" class="shrink-0 rounded-lg bg-slate-900 hover:bg-slate-800 text-white px-2.5 py-1.5 text-xs font-medium transition">
+              Salin URL
+            </button>
+          </div>
+
+          <!-- Code Snippet Tabs -->
+          <div class="flex items-center gap-1 border-b border-slate-200 mb-3">
+            <button type="button" data-tab="js" class="snippet-tab px-3 py-1.5 text-xs font-semibold border-b-2 border-indigo-600 text-indigo-600">JavaScript</button>
+            <button type="button" data-tab="py" class="snippet-tab px-3 py-1.5 text-xs font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">Python</button>
+            <button type="button" data-tab="curl" class="snippet-tab px-3 py-1.5 text-xs font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">cURL</button>
+            <button type="button" data-tab="json" class="snippet-tab px-3 py-1.5 text-xs font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">Live JSON</button>
+          </div>
+
+          <div class="relative">
+            <pre id="snippetBox" class="rounded-xl bg-slate-900 text-slate-100 p-3.5 text-xs overflow-x-auto leading-relaxed max-h-52"></pre>
+            <button id="copySnippetBtn" type="button" class="absolute top-2.5 right-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1 text-[11px] font-medium text-slate-200 transition">
+              Salin
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- History Table -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 class="text-base font-semibold text-slate-900">Riwayat Pembacaan Terbaru</h2>
+          <p class="text-xs text-slate-500">10 data terakhir yang diterima oleh dashboard</p>
+        </div>
+        <button id="downloadCsvBtn" type="button" class="rounded-lg border border-slate-200 hover:bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition">
+          Unduh CSV
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">
+            <tr>
+              <th class="px-5 py-3 font-semibold">Waktu</th>
+              <th class="px-5 py-3 font-semibold">Counter</th>
+              <th class="px-5 py-3 font-semibold">Nilai</th>
+              <th class="px-5 py-3 font-semibold">Sumber</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody" class="divide-y divide-slate-100 text-slate-700">
+            <tr>
+              <td colspan="4" class="px-5 py-6 text-center text-xs text-slate-400">Menunggu data pertama...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // =========================================================================
+    // KONFIGURASI DEFAULT UNTUK DEPLOY DI SERVER KAMU
+    // Ganti isi DEFAULT_FIREBASE_URL di bawah dengan URL Realtime Database kamu
+    // (tanpa "/" di akhir) sebelum upload index.html ke server/domain kamu!
+    // =========================================================================
+    const DEFAULT_FIREBASE_URL = "";
+    const DEFAULT_NODE_PATH = "data_loop";
+    const DEFAULT_INTERVAL_MS = 3000;
+
+    // State aplikasi
+    const state = {
+      firebaseUrl: DEFAULT_FIREBASE_URL,
+      nodePath: DEFAULT_NODE_PATH,
+      intervalMs: DEFAULT_INTERVAL_MS,
+      isDemo: !DEFAULT_FIREBASE_URL,
+      isPaused: false,
+      activeTab: "js",
+      timerId: null,
+      demoCounter: 0,
+      latestPayload: null,
+      history: [], // { time, counter, value, keyName, source }
+      minVal: null,
+      maxVal: null
+    };
+
+    // DOM Elements
+    const els = {
+      toast: document.getElementById("toast"),
+      toastText: document.getElementById("toastText"),
+      statusBadge: document.getElementById("statusBadge"),
+      statusPing: document.getElementById("statusPing"),
+      statusDot: document.getElementById("statusDot"),
+      statusText: document.getElementById("statusText"),
+      togglePollBtn: document.getElementById("togglePollBtn"),
+      toggleConfigBtn: document.getElementById("toggleConfigBtn"),
+      configPanel: document.getElementById("configPanel"),
+      configForm: document.getElementById("configForm"),
+      useDemoBtn: document.getElementById("useDemoBtn"),
+      firebaseUrlInput: document.getElementById("firebaseUrlInput"),
+      nodePathInput: document.getElementById("nodePathInput"),
+      intervalSelect: document.getElementById("intervalSelect"),
+      errorBanner: document.getElementById("errorBanner"),
+      latestValue: document.getElementById("latestValue"),
+      valueKeyLabel: document.getElementById("valueKeyLabel"),
+      deltaBadge: document.getElementById("deltaBadge"),
+      minValue: document.getElementById("minValue"),
+      maxValue: document.getElementById("maxValue"),
+      latestCounter: document.getElementById("latestCounter"),
+      sampleCount: document.getElementById("sampleCount"),
+      lastUpdated: document.getElementById("lastUpdated"),
+      modeTag: document.getElementById("modeTag"),
+      intervalDisplay: document.getElementById("intervalDisplay"),
+      clearChartBtn: document.getElementById("clearChartBtn"),
+      endpointUrlText: document.getElementById("endpointUrlText"),
+      copyUrlBtn: document.getElementById("copyUrlBtn"),
+      snippetBox: document.getElementById("snippetBox"),
+      copySnippetBtn: document.getElementById("copySnippetBtn"),
+      downloadCsvBtn: document.getElementById("downloadCsvBtn"),
+      historyBody: document.getElementById("historyBody"),
+      tabButtons: document.querySelectorAll(".snippet-tab")
+    };
+
+    // Chart.js init
+    const ctx = document.getElementById("liveChart").getContext("2d");
+    const liveChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [{
+          label: "Nilai ESP",
+          data: [],
+          borderColor: "#4f46e5",
+          backgroundColor: "rgba(79, 70, 229, 0.12)",
+          borderWidth: 2.5,
+          pointRadius: 3.5,
+          pointBackgroundColor: "#4f46e5",
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 250 },
+        plugins: {
+          legend: { display: false },
+          tooltip: { mode: "index", intersect: false }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { maxTicksLimit: 8, color: "#64748b", font: { size: 11 } }
+          },
+          y: {
+            grid: { color: "#e2e8f0" },
+            ticks: { color: "#64748b", font: { size: 11 } }
+          }
+        }
+      }
+    });
+
+    // Helper: Toast
+    let toastTimeout = null;
+    function showToast(msg) {
+      els.toastText.textContent = msg;
+      els.toast.classList.remove("hidden");
+      els.toast.classList.add("flex");
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        els.toast.classList.add("hidden");
+        els.toast.classList.remove("flex");
+      }, 2200);
+    }
+
+    // Helper: Copy to clipboard with fallback
+    function copyText(text, successMsg) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast(successMsg);
+        }).catch(() => fallbackCopy(text, successMsg));
+      } else {
+        fallbackCopy(text, successMsg);
+      }
+    }
+
+    function fallbackCopy(text, successMsg) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        showToast(successMsg);
+      } catch (e) {
+        showToast("Gagal menyalin otomatis");
+      }
+      document.body.removeChild(ta);
+    }
+
+    // Helper: Build endpoint URL
+    function getEndpointUrl() {
+      const base = (state.firebaseUrl || "https://nama-project-default-rtdb.asia-southeast1.firebasedatabase.app").replace(/\/+$/, "");
+      const node = (state.nodePath || "data_loop").replace(/^\/+|\/+$/g, "");
+      return `${base}/${node}.json`;
+    }
+
+    // Update status badge
+    function setStatus(type, text) {
+      els.statusText.textContent = text;
+      els.statusBadge.className = "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium border ";
+      els.statusPing.className = "pulse-dot absolute inline-flex h-full w-full rounded-full opacity-75 ";
+      els.statusDot.className = "relative inline-flex rounded-full h-2 w-2 ";
+
+      if (type === "live") {
+        els.statusBadge.className += "bg-emerald-500/15 border-emerald-400/30 text-emerald-300";
+        els.statusPing.className += "bg-emerald-400";
+        els.statusDot.className += "bg-emerald-400";
+        els.modeTag.textContent = "Live Firebase";
+        els.modeTag.className = "rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700";
+      } else if (type === "error") {
+        els.statusBadge.className += "bg-rose-500/15 border-rose-400/30 text-rose-300";
+        els.statusPing.className += "bg-rose-400 hidden";
+        els.statusDot.className += "bg-rose-400";
+        els.modeTag.textContent = "Error";
+        els.modeTag.className = "rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-700";
+      } else if (type === "paused") {
+        els.statusBadge.className += "bg-slate-700 border-slate-600 text-slate-300";
+        els.statusPing.className += "bg-slate-400 hidden";
+        els.statusDot.className += "bg-slate-400";
+      } else {
+        els.statusBadge.className += "bg-amber-500/15 border-amber-400/30 text-amber-300";
+        els.statusPing.className += "bg-amber-400";
+        els.statusDot.className += "bg-amber-400";
+        els.modeTag.textContent = "Simulasi";
+        els.modeTag.className = "rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700";
+      }
+    }
+
+    // Update API snippets
+    function renderSnippet() {
+      const endpoint = getEndpointUrl();
+      els.endpointUrlText.textContent = endpoint;
+
+      let code = "";
+      if (state.activeTab === "js") {
+        code = `// Ambil data ESP di JavaScript (Browser / Node.js)\nfetch("${endpoint}")\n  .then(res => res.json())\n  .then(data => {\n    console.log("Data ESP:", data);\n    // Contoh akses nilai:\n    // console.log(data.nilai, data.counter);\n  });`;
+      } else if (state.activeTab === "py") {
+        code = `# Ambil data ESP di Python\nimport requests\n\nres = requests.get("${endpoint}")\ndata = res.json()\nprint("Data ESP:", data)`;
+      } else if (state.activeTab === "curl") {
+        code = `# Cek langsung lewat terminal\ncurl "${endpoint}"`;
+      } else {
+        code = state.latestPayload !== null
+          ? JSON.stringify(state.latestPayload, null, 2)
+          : '{\n  "info": "Belum ada data masuk"\n}';
+      }
+      els.snippetBox.textContent = code;
+    }
+
+    // Parse payload (mendukung PUT single object, POST pushed list, atau raw number)
+    function extractReading(raw) {
+      if (raw === null || raw === undefined) return null;
+
+      // Jika raw angka langsung
+      if (typeof raw === "number") {
+        return { counter: state.history.length + 1, value: raw, keyName: "nilai" };
+      }
+
+      if (typeof raw === "object") {
+        // Cek apakah ini hasil POST (key otomatis Firebase seperti -Nx...)
+        const keys = Object.keys(raw);
+        let target = raw;
+        if (keys.length > 0 && typeof raw[keys[keys.length - 1]] === "object" && raw[keys[keys.length - 1]] !== null) {
+          target = raw[keys[keys.length - 1]];
+        }
+
+        const counter = target.counter !== undefined ? target.counter : (state.history.length + 1);
+        if (typeof target.nilai === "number") {
+          return { counter, value: target.nilai, keyName: "nilai" };
+        }
+        // Fallback: cari field numerik selain counter
+        for (const k of Object.keys(target)) {
+          if (k !== "counter" && typeof target[k] === "number") {
+            return { counter, value: target[k], keyName: k };
+          }
+        }
+        // Jika hanya ada counter
+        if (typeof counter === "number") {
+          return { counter, value: counter, keyName: "counter" };
+        }
+      }
+      return null;
+    }
+
+    // Push reading to UI
+    function ingestReading(rawPayload, sourceLabel) {
+      state.latestPayload = rawPayload;
+      const parsed = extractReading(rawPayload);
+      if (!parsed) return;
+
+      const nowStr = new Date().toLocaleTimeString("id-ID", { hour12: false });
+      const prev = state.history.length > 0 ? state.history[0].value : null;
+
+      state.history.unshift({
+        time: nowStr,
+        counter: parsed.counter,
+        value: parsed.value,
+        keyName: parsed.keyName,
+        source: sourceLabel
+      });
+
+      if (state.history.length > 20) {
+        state.history.pop();
+      }
+
+      if (state.minVal === null || parsed.value < state.minVal) state.minVal = parsed.value;
+      if (state.maxVal === null || parsed.value > state.maxVal) state.maxVal = parsed.value;
+
+      // Update KPI
+      els.latestValue.textContent = parsed.value;
+      els.valueKeyLabel.textContent = parsed.keyName;
+      els.latestCounter.textContent = parsed.counter;
+      els.sampleCount.textContent = state.history.length;
+      els.lastUpdated.textContent = nowStr;
+      els.minValue.textContent = state.minVal;
+      els.maxValue.textContent = state.maxVal;
+
+      if (prev !== null) {
+        const diff = Number((parsed.value - prev).toFixed(2));
+        if (diff > 0) {
+          els.deltaBadge.textContent = `+${diff}`;
+          els.deltaBadge.className = "rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700";
+        } else if (diff < 0) {
+          els.deltaBadge.textContent = `${diff}`;
+          els.deltaBadge.className = "rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-700";
+        } else {
+          els.deltaBadge.textContent = "Stabil";
+          els.deltaBadge.className = "rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600";
+        }
+      }
+
+      // Update Chart (urutan kronologis kiri ke kanan)
+      const chronological = [...state.history].reverse();
+      liveChart.data.labels = chronological.map(item => item.time);
+      liveChart.data.datasets[0].data = chronological.map(item => item.value);
+      liveChart.data.datasets[0].label = parsed.keyName;
+      liveChart.update();
+
+      // Update Table (10 terakhir)
+      const rows = state.history.slice(0, 10).map(item => `
+        <tr class="hover:bg-slate-50/80 transition">
+          <td class="px-5 py-2.5 font-mono text-xs text-slate-600">${item.time}</td>
+          <td class="px-5 py-2.5 font-medium text-slate-900">#${item.counter}</td>
+          <td class="px-5 py-2.5 font-semibold text-indigo-600">${item.value}</td>
+          <td class="px-5 py-2.5 text-xs text-slate-500">${item.source}</td>
+        </tr>
+      `).join("");
+      els.historyBody.innerHTML = rows;
+
+      if (state.activeTab === "json") {
+        renderSnippet();
+      }
+    }
+
+    // Fetch single tick
+    async function pollOnce() {
+      if (state.isPaused) return;
+
+      if (state.isDemo) {
+        state.demoCounter += 1;
+        const fakeVal = Math.floor(22 + Math.random() * 12);
+        const demoPayload = { counter: state.demoCounter, nilai: fakeVal };
+        els.errorBanner.classList.add("hidden");
+        setStatus("demo", "Mode Simulasi");
+        ingestReading(demoPayload, "Simulasi");
+        return;
+      }
+
+      const endpoint = getEndpointUrl();
+      try {
+        const res = await fetch(endpoint, { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} — cek apakah Rules Firebase sudah public (.read: true)`);
+        }
+        const data = await res.json();
+        if (data === null) {
+          els.errorBanner.textContent = `Terhubung ke Firebase, tapi node "/${state.nodePath}" masih kosong. Pastikan ESP sedang berjalan dan mengirim data.`;
+          els.errorBanner.classList.remove("hidden");
+          setStatus("live", "Terhubung (Kosong)");
+          state.latestPayload = null;
+          if (state.activeTab === "json") renderSnippet();
+          return;
+        }
+        els.errorBanner.classList.add("hidden");
+        setStatus("live", "Live Firebase");
+        ingestReading(data, "Firebase RTDB");
+      } catch (err) {
+        els.errorBanner.textContent = `Gagal mengambil data dari ${endpoint}: ${err.message}`;
+        els.errorBanner.classList.remove("hidden");
+        setStatus("error", "Koneksi Gagal");
+      }
+    }
+
+    function startPolling() {
+      clearInterval(state.timerId);
+      els.intervalDisplay.textContent = `${state.intervalMs / 1000} detik`;
+      pollOnce();
+      state.timerId = setInterval(pollOnce, state.intervalMs);
+    }
+
+    function resetData() {
+      state.history = [];
+      state.minVal = null;
+      state.maxVal = null;
+      state.demoCounter = 0;
+      els.latestValue.textContent = "--";
+      els.latestCounter.textContent = "--";
+      els.minValue.textContent = "--";
+      els.maxValue.textContent = "--";
+      els.sampleCount.textContent = "0";
+      els.deltaBadge.textContent = "—";
+      liveChart.data.labels = [];
+      liveChart.data.datasets[0].data = [];
+      liveChart.update();
+      els.historyBody.innerHTML = '<tr><td colspan="4" class="px-5 py-6 text-center text-xs text-slate-400">Grafik direset. Menunggu data berikutnya...</td></tr>';
+    }
+
+    // Event Listeners
+    els.configForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const urlVal = els.firebaseUrlInput.value.trim().replace(/\/+$/, "");
+      const nodeVal = els.nodePathInput.value.trim().replace(/^\/+|\/+$/g, "") || "data_loop";
+      const intervalVal = parseInt(els.intervalSelect.value, 10) || 3000;
+
+      if (!urlVal.startsWith("https://")) {
+        els.errorBanner.textContent = "URL Firebase harus diawali https:// (contoh: https://project-id-default-rtdb.asia-southeast1.firebasedatabase.app)";
+        els.errorBanner.classList.remove("hidden");
+        return;
+      }
+
+      state.firebaseUrl = urlVal;
+      state.nodePath = nodeVal;
+      state.intervalMs = intervalVal;
+      state.isDemo = false;
+      state.isPaused = false;
+      els.togglePollBtn.textContent = "Jeda";
+
+      try {
+        localStorage.setItem("esp_fb_url", urlVal);
+        localStorage.setItem("esp_fb_node", nodeVal);
+        localStorage.setItem("esp_fb_interval", String(intervalVal));
+      } catch (err) {}
+
+      resetData();
+      renderSnippet();
+      startPolling();
+      showToast("Terhubung ke URL Firebase baru");
+    });
+
+    els.useDemoBtn.addEventListener("click", () => {
+      state.isDemo = true;
+      state.isPaused = false;
+      els.togglePollBtn.textContent = "Jeda";
+      els.errorBanner.classList.add("hidden");
+      resetData();
+      renderSnippet();
+      startPolling();
+      showToast("Beralih ke Mode Simulasi");
+    });
+
+    els.togglePollBtn.addEventListener("click", () => {
+      state.isPaused = !state.isPaused;
+      if (state.isPaused) {
+        els.togglePollBtn.textContent = "Lanjut";
+        setStatus("paused", "Dijeda");
+      } else {
+        els.togglePollBtn.textContent = "Jeda";
+        pollOnce();
+      }
+    });
+
+    els.toggleConfigBtn.addEventListener("click", () => {
+      els.configPanel.classList.toggle("hidden");
+    });
+
+    els.clearChartBtn.addEventListener("click", () => {
+      resetData();
+      showToast("Grafik dan riwayat direset");
+    });
+
+    els.copyUrlBtn.addEventListener("click", () => {
+      copyText(getEndpointUrl(), "Endpoint JSON disalin!");
+    });
+
+    els.copySnippetBtn.addEventListener("click", () => {
+      copyText(els.snippetBox.textContent, "Kode disalin ke clipboard!");
+    });
+
+    els.tabButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        state.activeTab = btn.dataset.tab;
+        els.tabButtons.forEach(b => {
+          const active = b.dataset.tab === state.activeTab;
+          b.className = active
+            ? "snippet-tab px-3 py-1.5 text-xs font-semibold border-b-2 border-indigo-600 text-indigo-600"
+            : "snippet-tab px-3 py-1.5 text-xs font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700";
+        });
+        renderSnippet();
+      });
+    });
+
+    els.downloadCsvBtn.addEventListener("click", () => {
+      if (state.history.length === 0) {
+        showToast("Belum ada data untuk diunduh");
+        return;
+      }
+      const header = "Waktu,Counter,Nilai,Sumber\n";
+      const lines = state.history.map(h => `${h.time},${h.counter},${h.value},${h.source}`).join("\n");
+      const blob = new Blob([header + lines], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "esp-firebase-log.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("Log CSV diunduh");
+    });
+
+    // Boot: cek query param ?db=... atau localStorage atau DEFAULT_FIREBASE_URL
+    function init() {
+      const params = new URLSearchParams(window.location.search);
+      const queryDb = params.get("db");
+      const queryNode = params.get("node");
+
+      let savedUrl = "";
+      let savedNode = "";
+      let savedInterval = "";
+      try {
+        savedUrl = localStorage.getItem("esp_fb_url") || "";
+        savedNode = localStorage.getItem("esp_fb_node") || "";
+        savedInterval = localStorage.getItem("esp_fb_interval") || "";
+      } catch (err) {}
+
+      const initialUrl = queryDb || DEFAULT_FIREBASE_URL || savedUrl;
+      const initialNode = queryNode || savedNode || DEFAULT_NODE_PATH;
+      const initialInterval = parseInt(savedInterval, 10) || DEFAULT_INTERVAL_MS;
+
+      state.nodePath = initialNode;
+      state.intervalMs = initialInterval;
+      els.nodePathInput.value = initialNode;
+      els.intervalSelect.value = String(initialInterval);
+
+      if (initialUrl && initialUrl.startsWith("https://")) {
+        state.firebaseUrl = initialUrl.replace(/\/+$/, "");
+        state.isDemo = false;
+        els.firebaseUrlInput.value = state.firebaseUrl;
+        if (DEFAULT_FIREBASE_URL) {
+          els.configPanel.classList.add("hidden");
+        }
+      } else {
+        state.isDemo = true;
+      }
+
+      renderSnippet();
+      startPolling();
+    }
+
+    init();
+  </script>
+</body>
+</html>
